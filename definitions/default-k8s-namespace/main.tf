@@ -19,7 +19,9 @@ output "name" {
 }
 
 output "humanitec_metadata" {
-  value = var.project
+  value = {
+    "project" = var.project
+  }
 }
 
 terraform {
