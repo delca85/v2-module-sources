@@ -3,6 +3,11 @@ variable "prefix" {
   default = "ns-"
 }
 
+variable "project" {
+  type    = string
+  default = "test-project"
+}
+
 resource "kubernetes_namespace" "ns" {
   metadata {
     generate_name = var.prefix
@@ -11,6 +16,10 @@ resource "kubernetes_namespace" "ns" {
 
 output "name" {
   value = kubernetes_namespace.ns.metadata[0].name
+}
+
+output "humanitec_metadata" {
+  value = var.project
 }
 
 terraform {
