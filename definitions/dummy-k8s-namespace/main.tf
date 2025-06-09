@@ -17,6 +17,11 @@ output "name" {
   value = "${var.prefix}-${random_string.dummy.id}"
 }
 
+output "secret_name" {
+  value     = "secret-${var.prefix}-${random_string.dummy.id}"
+  sensitive = true
+}
+
 output "humanitec_metadata" {
   value = {
     "project" = var.project
