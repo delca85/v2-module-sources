@@ -1,6 +1,6 @@
 variable "prefix" {
   type    = string
-  default = "ns-"
+  default = "ns"
 }
 
 variable "project" {
