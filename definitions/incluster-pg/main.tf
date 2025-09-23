@@ -1,3 +1,4 @@
+# Provider configuration
 terraform {
   required_providers {
     kubernetes = {
@@ -36,11 +37,13 @@ variable "namespace" {
   default     = "default"
 }
 
-
-# Generate a random password
+# Generate a random password (URL-safe characters only)
 resource "random_password" "postgres_password" {
   length  = 16
-  special = true
+  special = false # Avoid special characters that need URL encoding
+  upper   = true
+  lower   = true
+  numeric = true
 }
 
 # ConfigMap
@@ -70,30 +73,7 @@ resource "kubernetes_secret" "postgres_secret" {
   }
 }
 
-# PersistentVolume
-resource "kubernetes_persistent_volume" "postgres_pv" {
-  metadata {
-    name = "postgres-pv"
-  }
-
-  spec {
-    capacity = {
-      storage = var.storage_size
-    }
-
-    access_modes       = ["ReadWriteOnce"]
-    storage_class_name = "local-storage"
-
-    persistent_volume_source {
-      host_path {
-        path = "/tmp/postgres-data"
-        type = "DirectoryOrCreate"
-      }
-    }
-  }
-}
-
-# PersistentVolumeClaim
+# PersistentVolumeClaim (using Kind's default storage class)
 resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
   metadata {
     name      = "postgres-pvc"
@@ -101,8 +81,7 @@ resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
   }
 
   spec {
-    access_modes       = ["ReadWriteOnce"]
-    storage_class_name = "local-storage"
+    access_modes = ["ReadWriteOnce"]
 
     resources {
       requests = {
@@ -110,8 +89,6 @@ resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
       }
     }
   }
-
-  depends_on = [kubernetes_persistent_volume.postgres_pv]
 }
 
 # Deployment
@@ -257,8 +234,9 @@ resource "kubernetes_service" "postgres_service" {
 }
 
 # Outputs
+
 output "connection_string" {
-  description = "PostgreSQL connection string for in-cluster access"
-  value       = "postgresql://${var.postgres_user}:${random_password.postgres_password.result}@${kubernetes_service.postgres_service.metadata[0].name}.${var.namespace}.svc.cluster.local:5432/${var.postgres_database}"
+  description = "PostgreSQL connection string for in-cluster access (URL-encoded)"
+  value       = "postgresql://${var.postgres_user}:${urlencode(random_password.postgres_password.result)}@${kubernetes_service.postgres_service.metadata[0].name}.${var.namespace}.svc.cluster.local:5432/${var.postgres_database}"
   sensitive   = true
 }
