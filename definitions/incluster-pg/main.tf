@@ -56,7 +56,7 @@ resource "kubernetes_secret" "postgres_secret" {
   type = "Opaque"
 
   data = {
-    POSTGRES_PASSWORD = base64encode(random_password.postgres_password.result)
+    POSTGRES_PASSWORD = random_password.postgres_password.result # Store plain password, Kubernetes will base64 encode it
   }
 }
 
