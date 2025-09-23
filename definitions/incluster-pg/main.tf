@@ -214,6 +214,6 @@ resource "kubernetes_service" "postgres_service" {
 # Output
 output "connection_string" {
   description = "PostgreSQL connection string for in-cluster access"
-  value       = "postgresql://${var.postgres_user}:${urlencode(random_password.postgres_password.result)}@${kubernetes_service.postgres_service.metadata[0].name}:5432/${var.postgres_database}"
+  value       = "postgresql://${var.postgres_user}:${urlencode(random_password.postgres_password.result)}@${kubernetes_service.postgres_service.metadata[0].name}.${var.namespace}.svc.cluster.local:5432/${var.postgres_database}"
   sensitive   = true
 }
