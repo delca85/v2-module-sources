@@ -12,13 +12,13 @@ terraform {
 }
 
 # Variables
-variable "database" {
+variable "postgres_database" {
   description = "PostgreSQL database name"
   type        = string
   default     = "myapp"
 }
 
-variable "user" {
+variable "postgres_user" {
   description = "PostgreSQL username"
   type        = string
   default     = "postgres"
@@ -36,6 +36,7 @@ variable "namespace" {
   default     = "default"
 }
 
+
 # Generate a random password
 resource "random_password" "postgres_password" {
   length  = 16
@@ -50,8 +51,8 @@ resource "kubernetes_config_map" "postgres_config" {
   }
 
   data = {
-    POSTGRES_DB   = var.database
-    POSTGRES_USER = var.user
+    POSTGRES_DB   = var.postgres_database
+    POSTGRES_USER = var.postgres_user
   }
 }
 
@@ -84,20 +85,9 @@ resource "kubernetes_persistent_volume" "postgres_pv" {
     storage_class_name = "local-storage"
 
     persistent_volume_source {
-      local {
+      host_path {
         path = "/tmp/postgres-data"
-      }
-    }
-
-    node_affinity {
-      required {
-        node_selector_term {
-          match_expressions {
-            key      = "kubernetes.io/hostname"
-            operator = "In"
-            values   = ["canyon-control-plane"]
-          }
-        }
+        type = "DirectoryOrCreate"
       }
     }
   }
@@ -242,7 +232,7 @@ resource "kubernetes_deployment" "postgres" {
   ]
 }
 
-# ClusterIP Service
+# ClusterIP Service (required for internal access)
 resource "kubernetes_service" "postgres_service" {
   metadata {
     name      = "postgres-service"
@@ -266,10 +256,9 @@ resource "kubernetes_service" "postgres_service" {
   depends_on = [kubernetes_deployment.postgres]
 }
 
-
 # Outputs
 output "connection_string" {
   description = "PostgreSQL connection string for in-cluster access"
-  value       = "postgresql://${var.user}:${random_password.postgres_password.result}@${kubernetes_service.postgres_service.metadata[0].name}.${var.namespace}.svc.cluster.local:5432/${var.database}"
+  value       = "postgresql://${var.postgres_user}:${random_password.postgres_password.result}@${kubernetes_service.postgres_service.metadata[0].name}.${var.namespace}.svc.cluster.local:5432/${var.postgres_database}"
   sensitive   = true
 }
