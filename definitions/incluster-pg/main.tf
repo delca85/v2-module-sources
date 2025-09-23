@@ -37,26 +37,13 @@ variable "namespace" {
   default     = "default"
 }
 
-# Generate a random password (URL-safe characters only)
+# Generate a random password
 resource "random_password" "postgres_password" {
   length  = 16
-  special = false # Avoid special characters that need URL encoding
+  special = false
   upper   = true
   lower   = true
   numeric = true
-}
-
-# ConfigMap
-resource "kubernetes_config_map" "postgres_config" {
-  metadata {
-    name      = "postgres-config"
-    namespace = var.namespace
-  }
-
-  data = {
-    POSTGRES_DB   = var.postgres_database
-    POSTGRES_USER = var.postgres_user
-  }
 }
 
 # Secret
@@ -73,7 +60,7 @@ resource "kubernetes_secret" "postgres_secret" {
   }
 }
 
-# PersistentVolumeClaim (using Kind's default storage class)
+# PersistentVolumeClaim (with explicit storage class)
 resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
   metadata {
     name      = "postgres-pvc"
@@ -81,7 +68,8 @@ resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
   }
 
   spec {
-    access_modes = ["ReadWriteOnce"]
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = "standard" # Use Kind's default storage class explicitly
 
     resources {
       requests = {
@@ -89,6 +77,8 @@ resource "kubernetes_persistent_volume_claim" "postgres_pvc" {
       }
     }
   }
+
+  wait_until_bound = false # Don't wait for binding during terraform apply
 }
 
 # Deployment
@@ -125,23 +115,13 @@ resource "kubernetes_deployment" "postgres" {
           }
 
           env {
-            name = "POSTGRES_DB"
-            value_from {
-              config_map_key_ref {
-                name = kubernetes_config_map.postgres_config.metadata[0].name
-                key  = "POSTGRES_DB"
-              }
-            }
+            name  = "POSTGRES_DB"
+            value = var.postgres_database
           }
 
           env {
-            name = "POSTGRES_USER"
-            value_from {
-              config_map_key_ref {
-                name = kubernetes_config_map.postgres_config.metadata[0].name
-                key  = "POSTGRES_USER"
-              }
-            }
+            name  = "POSTGRES_USER"
+            value = var.postgres_user
           }
 
           env {
@@ -166,7 +146,7 @@ resource "kubernetes_deployment" "postgres" {
 
           readiness_probe {
             exec {
-              command = ["/bin/sh", "-c", "pg_isready -U postgres -d myapp"]
+              command = ["/bin/sh", "-c", "pg_isready -U ${var.postgres_user} -d ${var.postgres_database}"]
             }
             initial_delay_seconds = 30
             period_seconds        = 5
@@ -174,7 +154,7 @@ resource "kubernetes_deployment" "postgres" {
 
           liveness_probe {
             exec {
-              command = ["/bin/sh", "-c", "pg_isready -U postgres -d myapp"]
+              command = ["/bin/sh", "-c", "pg_isready -U ${var.postgres_user} -d ${var.postgres_database}"]
             }
             initial_delay_seconds = 60
             period_seconds        = 30
@@ -203,13 +183,11 @@ resource "kubernetes_deployment" "postgres" {
   }
 
   depends_on = [
-    kubernetes_config_map.postgres_config,
-    kubernetes_secret.postgres_secret,
-    kubernetes_persistent_volume_claim.postgres_pvc
+    kubernetes_secret.postgres_secret
   ]
 }
 
-# ClusterIP Service (required for internal access)
+# Service
 resource "kubernetes_service" "postgres_service" {
   metadata {
     name      = "postgres-service"
@@ -233,10 +211,9 @@ resource "kubernetes_service" "postgres_service" {
   depends_on = [kubernetes_deployment.postgres]
 }
 
-# Outputs
-
+# Output
 output "connection_string" {
-  description = "PostgreSQL connection string for in-cluster access (URL-encoded)"
-  value       = "postgresql://${var.postgres_user}:${urlencode(random_password.postgres_password.result)}@${kubernetes_service.postgres_service.metadata[0].name}.${var.namespace}.svc.cluster.local:5432/${var.postgres_database}"
+  description = "PostgreSQL connection string for in-cluster access"
+  value       = "postgresql://${var.postgres_user}:${urlencode(random_password.postgres_password.result)}@${kubernetes_service.postgres_service.metadata[0].name}:5432/${var.postgres_database}"
   sensitive   = true
 }
